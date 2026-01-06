@@ -80,4 +80,59 @@ def load_orders_knowledge(order_id: str | None) -> str:
 # -------------------------
 @app.get("/", response_class=HTMLResponse)
 def home():
-    fi
+    file_path = os.path.join(os.path.dirname(__file__), "index.html")
+    with open(file_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+# -------------------------
+# Chat endpoint
+# -------------------------
+@app.post("/chat")
+def chat(data: ChatInput):
+    user_message = data.message.strip().lower()
+
+    # ✅ Handle greetings first
+    if user_message in ["hi", "hello", "hey", "good morning", "good evening"]:
+        return {
+            "reply": (
+                "👋 Hi! I can help you with order details.\n\n"
+                "Try asking:\n"
+                "- What is the status of order 123?\n"
+                "- When will order 456 be delivered?"
+            )
+        }
+
+    order_id = extract_order_id(user_message)
+    knowledge = load_orders_knowledge(order_id)
+
+    if not knowledge:
+        return {
+            "reply": "I don’t have information for that order."
+        }
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": f"""
+You are an order support assistant.
+
+The data below contains order records.
+Each line represents ONE order.
+
+Answer clearly and concisely using ONLY this data.
+
+DATA:
+{knowledge}
+"""
+            },
+            {
+                "role": "user",
+                "content": data.message
+            }
+        ]
+    )
+
+    return {"reply": response.choices[0].message.content}
