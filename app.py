@@ -27,15 +27,64 @@ class ChatInput(BaseModel):
 
 
 # -------------------------
-# Utility: extract alphanumeric OrderID (JB3001)
+# Load all OrderIDs once
 # -------------------------
-def extract_order_id(text: str):
-    match = re.search(r"\b[A-Za-z0-9]+\b", text)
-    return match.group(0) if match else None
+def load_all_order_ids():
+    base_dir = os.path.dirname(__file__)
+    file_path = os.path.join(base_dir, "knowledge", "orders.csv")
+
+    order_ids = set()
+
+    if not os.path.exists(file_path):
+        return order_ids
+
+    with open(file_path, newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            oid = str(row.get("OrderID", "")).strip()
+            if oid:
+                order_ids.add(oid.lower())
+
+    return order_ids
+
+
+ORDER_IDS = load_all_order_ids()
 
 
 # -------------------------
-# Utility: detect intent
+# Detect OrderID from user text
+# -------------------------
+def detect_order_id_from_message(message: str):
+    words = re.findall(r"[A-Za-z0-9\-]+", message.lower())
+
+    for word in words:
+        if word in ORDER_IDS:
+            return word
+
+    return None
+
+
+# -------------------------
+# Load order by OrderID
+# -------------------------
+def get_order_by_id(order_id: str):
+    base_dir = os.path.dirname(__file__)
+    file_path = os.path.join(base_dir, "knowledge", "orders.csv")
+
+    if not os.path.exists(file_path):
+        return None
+
+    with open(file_path, newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if order_id == str(row.get("OrderID", "")).lower():
+                return row
+
+    return None
+
+
+# -------------------------
+# Detect user intent
 # -------------------------
 def detect_intent(message: str):
     msg = message.lower()
@@ -55,28 +104,6 @@ def detect_intent(message: str):
 
 
 # -------------------------
-# Load order by OrderID
-# -------------------------
-def get_order_by_id(order_id: str):
-    base_dir = os.path.dirname(__file__)
-    file_path = os.path.join(base_dir, "knowledge", "orders.csv")
-
-    if not os.path.exists(file_path):
-        return None
-
-    order_id = order_id.lower()
-
-    with open(file_path, newline="", encoding="utf-8") as csvfile:
-        reader = csv.DictReader(csvfile)
-
-        for row in reader:
-            if order_id == str(row.get("OrderID", "")).lower():
-                return row
-
-    return None
-
-
-# -------------------------
 # Serve frontend UI
 # -------------------------
 @app.get("/", response_class=HTMLResponse)
@@ -93,38 +120,35 @@ def home():
 def chat(data: ChatInput):
     user_message = data.message.strip().lower()
 
-    # ✅ Greetings
+    # Greetings
     if user_message in ["hi", "hello", "hey", "good morning", "good evening"]:
         return {
             "reply": (
                 "👋 Hi! I can help you with your order.\n\n"
                 "Try asking:\n"
-                "• What is the status of order JB3001?\n"
-                "• When will order JB3001 be delivered?\n"
-                "• Show order details for JB3001"
+                "• When will order JB3002 be delivered?\n"
+                "• What is the status of order JB3001?"
             )
         }
 
-    # Extract OrderID
-    order_id = extract_order_id(user_message)
+    # Detect OrderID from message
+    order_id = detect_order_id_from_message(user_message)
 
     if not order_id:
         return {
-            "reply": "Please provide your Order ID (for example: JB3001)."
+            "reply": "Please include a valid Order ID (for example: JB3001)."
         }
 
     order = get_order_by_id(order_id)
 
     if not order:
         return {
-            "reply": f"I couldn’t find any order with ID {order_id}."
+            "reply": f"I couldn’t find any order with ID {order_id.upper()}."
         }
 
     intent = detect_intent(user_message)
 
-    # -------------------------
-    # Intent-based responses
-    # -------------------------
+    # Intent-based response
     if intent == "delivery_date":
         reply = (
             f"📦 Order {order['OrderID']}\n"
@@ -150,7 +174,6 @@ def chat(data: ChatInput):
         )
 
     else:
-        # Full details
         reply = (
             f"📦 Order {order['OrderID']}\n"
             f"• Status: {order['OrderStatus']}\n"
