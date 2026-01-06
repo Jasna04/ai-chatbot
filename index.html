@@ -16,8 +16,8 @@
       flex-direction: column;
       height: 100vh;
 
-      /* ✅ BACKGROUND IMAGE */
-      background-image: url("chatbot-message-bubble-vectorart.png");
+      /* Background image */
+      background-image: url("/static/chatbot-bg.png");
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -27,7 +27,7 @@
       padding: 12px;
       font-weight: bold;
       border-bottom: 1px solid #ddd;
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.95);
     }
 
     #chat {
@@ -73,10 +73,17 @@
   </div>
 
   <script>
+    const chat = document.getElementById("chat");
+
+    // ✅ Greeting message on chatbot launch
+    window.onload = () => {
+      chat.innerHTML += `
+        <p><b>Bot:</b> 👋 Hello! I’m your AI assistant. How can I help you today?</p>
+      `;
+    };
+
     async function send() {
       const input = document.getElementById("input");
-      const chat = document.getElementById("chat");
-
       const message = input.value.trim();
       if (!message) return;
 
