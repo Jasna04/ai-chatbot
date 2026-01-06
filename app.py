@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from openai import OpenAI
 
 # -------------------------
 # App setup
@@ -20,8 +19,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI()
-
 # -------------------------
 # Request model
 # -------------------------
@@ -30,7 +27,7 @@ class ChatInput(BaseModel):
 
 
 # -------------------------
-# Utility: extract order_id
+# Utility: extract order number
 # -------------------------
 def extract_order_id(text: str):
     match = re.search(r"\b\d+\b", text)
@@ -38,41 +35,23 @@ def extract_order_id(text: str):
 
 
 # -------------------------
-# Load & filter orders.csv
+# Load order by OrderID
 # -------------------------
-def load_orders_knowledge(order_id: str | None) -> str:
+def get_order_by_id(order_id: str):
     base_dir = os.path.dirname(__file__)
     file_path = os.path.join(base_dir, "knowledge", "orders.csv")
 
     if not os.path.exists(file_path):
-        return ""
-
-    matched_rows = []
+        return None
 
     with open(file_path, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
 
         for row in reader:
-            if order_id:
-                # Match order_id column (case-insensitive)
-                for key, value in row.items():
-                    if "order" in key.lower() and str(value) == order_id:
-                        matched_rows.append(row)
-            else:
-                matched_rows.append(row)
+            if order_id in str(row.get("OrderID", "")):
+                return row
 
-    if not matched_rows:
-        return ""
-
-    # Convert rows to readable text
-    knowledge = []
-    for row in matched_rows:
-        row_text = ", ".join(
-            f"{k}: {v}" for k, v in row.items() if v
-        )
-        knowledge.append(row_text)
-
-    return "\n".join(knowledge)
+    return None
 
 
 # -------------------------
@@ -92,47 +71,39 @@ def home():
 def chat(data: ChatInput):
     user_message = data.message.strip().lower()
 
-    # ✅ Handle greetings first
+    # ✅ Handle greetings ONCE per message
     if user_message in ["hi", "hello", "hey", "good morning", "good evening"]:
         return {
             "reply": (
-                "👋 Hi! I can help you with order details.\n\n"
-                "Try asking:\n"
-                "- What is the status of order 123?\n"
-                "- When will order 456 be delivered?"
+                "👋 Hello! I’m your AI assistant. How can I help you today?\n\n"
+            
             )
         }
 
+    # Extract order number
     order_id = extract_order_id(user_message)
-    knowledge = load_orders_knowledge(order_id)
 
-    if not knowledge:
+    if not order_id:
         return {
-            "reply": "I don’t have information for that order."
+            "reply": "Please provide your Order ID so I can help you."
         }
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": f"""
-You are an order support assistant.
+    order = get_order_by_id(order_id)
 
-The data below contains order records.
-Each line represents ONE order.
+    if not order:
+        return {
+            "reply": f"I couldn’t find any order with ID {order_id}."
+        }
 
-Answer clearly and concisely using ONLY this data.
-
-DATA:
-{knowledge}
-"""
-            },
-            {
-                "role": "user",
-                "content": data.message
-            }
-        ]
+    # ✅ Deterministic response (NO OpenAI)
+    reply = (
+        f"📦 Order {order['OrderID']}\n"
+        f"• Status: {order['OrderStatus']}\n"
+        f"• Item: {order['ItemName']} (Qty: {order['Quantity']})\n"
+        f"• Total Amount: ₹{order['TotalAmount']}\n"
+        f"• Payment Method: {order['PaymentMethod']}\n"
+        f"• Delivery Date: {order['DeliveryDate']}\n"
+        f"• Shipping Location: {order['ShippingCity']}, {order['ShippingState']}"
     )
 
-    return {"reply": response.choices[0].message.content}
+    return {"reply": reply}
