@@ -27,15 +27,15 @@ class ChatInput(BaseModel):
 
 
 # -------------------------
-# Utility: extract order number
+# Utility: extract alphanumeric OrderID (e.g. JB3001)
 # -------------------------
 def extract_order_id(text: str):
-    match = re.search(r"\b\d+\b", text)
+    match = re.search(r"\b[A-Za-z0-9]+\b", text)
     return match.group(0) if match else None
 
 
 # -------------------------
-# Load order by OrderID
+# Load order by OrderID (case-insensitive)
 # -------------------------
 def get_order_by_id(order_id: str):
     base_dir = os.path.dirname(__file__)
@@ -44,11 +44,13 @@ def get_order_by_id(order_id: str):
     if not os.path.exists(file_path):
         return None
 
+    order_id = order_id.lower()
+
     with open(file_path, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
 
         for row in reader:
-            if order_id in str(row.get("OrderID", "")):
+            if order_id == str(row.get("OrderID", "")).lower():
                 return row
 
     return None
@@ -71,21 +73,23 @@ def home():
 def chat(data: ChatInput):
     user_message = data.message.strip().lower()
 
-    # ✅ Handle greetings ONCE per message
+    # ✅ Handle greetings
     if user_message in ["hi", "hello", "hey", "good morning", "good evening"]:
         return {
             "reply": (
-                "👋 Hello! I’m your AI assistant. How can I help you today?\n\n"
-            
+                "👋 Hello! I can help you with your order.\n\n"
+                "Try asking:\n"
+                "• What is the status of order JB3001?\n"
+                "• When will order JB3002 be delivered?"
             )
         }
 
-    # Extract order number
+    # Extract OrderID
     order_id = extract_order_id(user_message)
 
     if not order_id:
         return {
-            "reply": "Please provide your Order ID so I can help you."
+            "reply": "Please provide your Order ID (for example: JB3001)."
         }
 
     order = get_order_by_id(order_id)
@@ -95,7 +99,7 @@ def chat(data: ChatInput):
             "reply": f"I couldn’t find any order with ID {order_id}."
         }
 
-    # ✅ Deterministic response (NO OpenAI)
+    # ✅ Deterministic response from CSV (NO AI guessing)
     reply = (
         f"📦 Order {order['OrderID']}\n"
         f"• Status: {order['OrderStatus']}\n"
