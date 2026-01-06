@@ -33,7 +33,7 @@ class ChatInput(BaseModel):
 # -------------------------
 def load_orders_knowledge() -> str:
     base_dir = os.path.dirname(__file__)
-    file_path = os.path.join(base_dir, "Knowledge", "orders.csv")
+    file_path = os.path.join(base_dir, "knowledge", "orders.csv")
 
     knowledge = []
 
