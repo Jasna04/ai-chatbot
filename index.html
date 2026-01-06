@@ -8,35 +8,40 @@
       margin: 0;
       height: 100vh;
       font-family: Arial, sans-serif;
-      background-image: url("chatbot-message-bubble-vectorart.png");
+      background: #f0f0f0; /* fallback */
     }
 
     .chat-container {
       display: flex;
       flex-direction: column;
       height: 100vh;
-    }
 
-    
+      /* ✅ BACKGROUND IMAGE */
+      background-image: url("chatbot-message-bubble-vectorart.png");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
 
     .chat-header {
       padding: 12px;
       font-weight: bold;
       border-bottom: 1px solid #ddd;
+      background: rgba(255, 255, 255, 0.9);
     }
 
     #chat {
-      flex: 1;               /* 👈 fills available space */
+      flex: 1;
       padding: 12px;
-      overflow-y: auto;      /* 👈 scrolls */
-      background: #f9f9f9;
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.85);
     }
 
     .chat-input {
       display: flex;
       padding: 10px;
       border-top: 1px solid #ddd;
-      background: #fff;
+      background: rgba(255, 255, 255, 0.95);
     }
 
     .chat-input input {
@@ -87,7 +92,7 @@
       chat.innerHTML += `<p><b>Bot:</b> ${data.reply}</p>`;
 
       input.value = "";
-      chat.scrollTop = chat.scrollHeight; // 👈 auto-scroll
+      chat.scrollTop = chat.scrollHeight;
     }
   </script>
 </body>
