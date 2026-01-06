@@ -2,21 +2,76 @@
 <html>
 <head>
   <title>My AI Chatbot</title>
+
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .chat-header {
+      padding: 12px;
+      font-weight: bold;
+      border-bottom: 1px solid #ddd;
+    }
+
+    #chat {
+      flex: 1;               /* 👈 fills available space */
+      padding: 12px;
+      overflow-y: auto;      /* 👈 scrolls */
+      background: #f9f9f9;
+    }
+
+    .chat-input {
+      display: flex;
+      padding: 10px;
+      border-top: 1px solid #ddd;
+      background: #fff;
+    }
+
+    .chat-input input {
+      flex: 1;
+      padding: 8px;
+      font-size: 14px;
+    }
+
+    .chat-input button {
+      margin-left: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+  </style>
 </head>
+
 <body>
-  <h2>My AI Chatbot</h2>
+  <div class="chat-container">
 
-  <div id="chat"></div>
+    <div class="chat-header">My AI Chatbot</div>
 
-  <input id="input" placeholder="Type a message" />
-  <button onclick="send()">Send</button>
+    <div id="chat"></div>
+
+    <div class="chat-input">
+      <input id="input" placeholder="Type a message" />
+      <button onclick="send()">Send</button>
+    </div>
+
+  </div>
 
   <script>
     async function send() {
       const input = document.getElementById("input");
       const chat = document.getElementById("chat");
 
-      const message = input.value;
+      const message = input.value.trim();
+      if (!message) return;
+
       chat.innerHTML += `<p><b>You:</b> ${message}</p>`;
 
       const res = await fetch("/chat", {
@@ -27,7 +82,9 @@
 
       const data = await res.json();
       chat.innerHTML += `<p><b>Bot:</b> ${data.reply}</p>`;
+
       input.value = "";
+      chat.scrollTop = chat.scrollHeight; // 👈 auto-scroll
     }
   </script>
 </body>
