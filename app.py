@@ -27,7 +27,7 @@ class ChatInput(BaseModel):
 
 
 # -------------------------
-# Utility: extract alphanumeric OrderID (e.g. JB3001)
+# Utility: extract alphanumeric OrderID (JB3001)
 # -------------------------
 def extract_order_id(text: str):
     match = re.search(r"\b[A-Za-z0-9]+\b", text)
@@ -35,7 +35,27 @@ def extract_order_id(text: str):
 
 
 # -------------------------
-# Load order by OrderID (case-insensitive)
+# Utility: detect intent
+# -------------------------
+def detect_intent(message: str):
+    msg = message.lower()
+
+    if "delivery" in msg or "delivered" in msg or "eta" in msg:
+        return "delivery_date"
+    if "status" in msg:
+        return "status"
+    if "amount" in msg or "price" in msg or "total" in msg:
+        return "amount"
+    if "item" in msg or "product" in msg:
+        return "item"
+    if "details" in msg or "full" in msg:
+        return "full"
+
+    return "full"
+
+
+# -------------------------
+# Load order by OrderID
 # -------------------------
 def get_order_by_id(order_id: str):
     base_dir = os.path.dirname(__file__)
@@ -73,14 +93,15 @@ def home():
 def chat(data: ChatInput):
     user_message = data.message.strip().lower()
 
-    # ✅ Handle greetings
+    # ✅ Greetings
     if user_message in ["hi", "hello", "hey", "good morning", "good evening"]:
         return {
             "reply": (
-                "👋 Hello! I can help you with your order.\n\n"
+                "👋 Hi! I can help you with your order.\n\n"
                 "Try asking:\n"
                 "• What is the status of order JB3001?\n"
-                "• When will order JB3002 be delivered?"
+                "• When will order JB3001 be delivered?\n"
+                "• Show order details for JB3001"
             )
         }
 
@@ -99,15 +120,45 @@ def chat(data: ChatInput):
             "reply": f"I couldn’t find any order with ID {order_id}."
         }
 
-    # ✅ Deterministic response from CSV (NO AI guessing)
-    reply = (
-        f"📦 Order {order['OrderID']}\n"
-        f"• Status: {order['OrderStatus']}\n"
-        f"• Item: {order['ItemName']} (Qty: {order['Quantity']})\n"
-        f"• Total Amount: ₹{order['TotalAmount']}\n"
-        f"• Payment Method: {order['PaymentMethod']}\n"
-        f"• Delivery Date: {order['DeliveryDate']}\n"
-        f"• Shipping Location: {order['ShippingCity']}, {order['ShippingState']}"
-    )
+    intent = detect_intent(user_message)
+
+    # -------------------------
+    # Intent-based responses
+    # -------------------------
+    if intent == "delivery_date":
+        reply = (
+            f"📦 Order {order['OrderID']}\n"
+            f"• Delivery Date: {order['DeliveryDate']}"
+        )
+
+    elif intent == "status":
+        reply = (
+            f"📦 Order {order['OrderID']}\n"
+            f"• Status: {order['OrderStatus']}"
+        )
+
+    elif intent == "amount":
+        reply = (
+            f"📦 Order {order['OrderID']}\n"
+            f"• Total Amount: ₹{order['TotalAmount']}"
+        )
+
+    elif intent == "item":
+        reply = (
+            f"📦 Order {order['OrderID']}\n"
+            f"• Item: {order['ItemName']} (Qty: {order['Quantity']})"
+        )
+
+    else:
+        # Full details
+        reply = (
+            f"📦 Order {order['OrderID']}\n"
+            f"• Status: {order['OrderStatus']}\n"
+            f"• Item: {order['ItemName']} (Qty: {order['Quantity']})\n"
+            f"• Total Amount: ₹{order['TotalAmount']}\n"
+            f"• Payment Method: {order['PaymentMethod']}\n"
+            f"• Delivery Date: {order['DeliveryDate']}\n"
+            f"• Shipping Location: {order['ShippingCity']}, {order['ShippingState']}"
+        )
 
     return {"reply": reply}
