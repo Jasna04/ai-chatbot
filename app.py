@@ -120,17 +120,6 @@ def home():
 def chat(data: ChatInput):
     user_message = data.message.strip().lower()
 
-    # Greetings
-    if user_message in ["hi", "hello", "hey", "good morning", "good evening"]:
-        return {
-            "reply": (
-                "👋 Hi! I can help you with your order.\n\n"
-                "Try asking:\n"
-                "• When will order JB3002 be delivered?\n"
-                "• What is the status of order JB3001?"
-            )
-        }
-
     # Detect OrderID from message
     order_id = detect_order_id_from_message(user_message)
 
