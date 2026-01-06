@@ -1,5 +1,6 @@
 import os
 import csv
+import re
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,26 +30,47 @@ class ChatInput(BaseModel):
 
 
 # -------------------------
-# Load knowledge from orders.csv (robust)
+# Utility: extract order_id
 # -------------------------
-def load_orders_knowledge() -> str:
+def extract_order_id(text: str):
+    match = re.search(r"\b\d+\b", text)
+    return match.group(0) if match else None
+
+
+# -------------------------
+# Load & filter orders.csv
+# -------------------------
+def load_orders_knowledge(order_id: str | None) -> str:
     base_dir = os.path.dirname(__file__)
     file_path = os.path.join(base_dir, "knowledge", "orders.csv")
 
-    # Safety check
     if not os.path.exists(file_path):
-        return "No order knowledge available."
+        return ""
 
-    knowledge = []
+    matched_rows = []
 
     with open(file_path, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
+
         for row in reader:
-            # Convert entire row to readable text
-            row_text = ", ".join(
-                f"{key}: {value}" for key, value in row.items() if value
-            )
-            knowledge.append(row_text)
+            if order_id:
+                # Match order_id column (case-insensitive)
+                for key, value in row.items():
+                    if "order" in key.lower() and str(value) == order_id:
+                        matched_rows.append(row)
+            else:
+                matched_rows.append(row)
+
+    if not matched_rows:
+        return ""
+
+    # Convert rows to readable text
+    knowledge = []
+    for row in matched_rows:
+        row_text = ", ".join(
+            f"{k}: {v}" for k, v in row.items() if v
+        )
+        knowledge.append(row_text)
 
     return "\n".join(knowledge)
 
@@ -58,38 +80,4 @@ def load_orders_knowledge() -> str:
 # -------------------------
 @app.get("/", response_class=HTMLResponse)
 def home():
-    file_path = os.path.join(os.path.dirname(__file__), "index.html")
-    with open(file_path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-# -------------------------
-# Chat endpoint
-# -------------------------
-@app.post("/chat")
-def chat(data: ChatInput):
-    knowledge = load_orders_knowledge()
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": f"""
-You are an order support chatbot.
-Answer ONLY using the knowledge below.
-If the answer is not present, say:
-"I don't have that information yet."
-
-KNOWLEDGE:
-{knowledge}
-"""
-            },
-            {
-                "role": "user",
-                "content": data.message
-            }
-        ]
-    )
-
-    return {"reply": response.choices[0].message.content}
+    fi
