@@ -29,22 +29,28 @@ class ChatInput(BaseModel):
 
 
 # -------------------------
-# Load knowledge from orders.csv
+# Load knowledge from orders.csv (robust)
 # -------------------------
 def load_orders_knowledge() -> str:
     base_dir = os.path.dirname(__file__)
     file_path = os.path.join(base_dir, "knowledge", "orders.csv")
+
+    # Safety check
+    if not os.path.exists(file_path):
+        return "No order knowledge available."
 
     knowledge = []
 
     with open(file_path, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            knowledge.append(
-                f"Q: {row['question']}\nA: {row['answer']}"
+            # Convert entire row to readable text
+            row_text = ", ".join(
+                f"{key}: {value}" for key, value in row.items() if value
             )
+            knowledge.append(row_text)
 
-    return "\n\n".join(knowledge)
+    return "\n".join(knowledge)
 
 
 # -------------------------
