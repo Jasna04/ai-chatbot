@@ -31,20 +31,17 @@ class ChatInput(BaseModel):
 # =====================================================
 
 def load_all_order_ids():
-    base_dir = os.path.dirname(__file__)
-    file_path = os.path.join(base_dir, "knowledge", "orders.csv")
-
+    file_path = os.path.join(os.path.dirname(__file__), "knowledge", "orders.csv")
     ids = set()
+
     if not os.path.exists(file_path):
         return ids
 
     with open(file_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+        for row in csv.DictReader(f):
             oid = str(row.get("OrderID", "")).strip()
             if oid:
                 ids.add(oid.lower())
-
     return ids
 
 
@@ -52,26 +49,21 @@ ORDER_IDS = load_all_order_ids()
 
 
 def detect_order_id(message: str):
-    words = re.findall(r"[A-Za-z0-9\-]+", message.lower())
-    for word in words:
+    for word in re.findall(r"[A-Za-z0-9\-]+", message.lower()):
         if word in ORDER_IDS:
             return word
     return None
 
 
 def get_order_by_id(order_id: str):
-    base_dir = os.path.dirname(__file__)
-    file_path = os.path.join(base_dir, "knowledge", "orders.csv")
-
+    file_path = os.path.join(os.path.dirname(__file__), "knowledge", "orders.csv")
     if not os.path.exists(file_path):
         return None
 
     with open(file_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+        for row in csv.DictReader(f):
             if order_id == str(row.get("OrderID", "")).lower():
                 return row
-
     return None
 
 
@@ -92,48 +84,29 @@ def detect_order_intent(message: str):
 # PRODUCTS KNOWLEDGE BASE
 # =====================================================
 
-def load_all_product_ids():
-    base_dir = os.path.dirname(__file__)
-    file_path = os.path.join(base_dir, "knowledge", "products.csv")
-
-    ids = set()
+def load_all_products():
+    file_path = os.path.join(os.path.dirname(__file__), "knowledge", "products.csv")
     if not os.path.exists(file_path):
-        return ids
-
+        return []
     with open(file_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            pid = str(row.get("Product ID", "")).strip()
-            if pid:
-                ids.add(pid.lower())
-
-    return ids
+        return list(csv.DictReader(f))
 
 
-PRODUCT_IDS = load_all_product_ids()
+PRODUCTS = load_all_products()
+PRODUCT_IDS = {str(p.get("Product ID", "")).lower() for p in PRODUCTS if p.get("Product ID")}
 
 
 def detect_product_id(message: str):
-    words = re.findall(r"[A-Za-z0-9\-]+", message.lower())
-    for word in words:
+    for word in re.findall(r"[A-Za-z0-9\-]+", message.lower()):
         if word in PRODUCT_IDS:
             return word
     return None
 
 
 def get_product_by_id(product_id: str):
-    base_dir = os.path.dirname(__file__)
-    file_path = os.path.join(base_dir, "knowledge", "products.csv")
-
-    if not os.path.exists(file_path):
-        return None
-
-    with open(file_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if product_id == str(row.get("Product ID", "")).lower():
-                return row
-
+    for p in PRODUCTS:
+        if product_id == str(p.get("Product ID", "")).lower():
+            return p
     return None
 
 
@@ -145,7 +118,9 @@ def detect_product_intent(message: str):
         return "availability"
     if "description" in msg or "about" in msg:
         return "description"
-    return "full"
+    if "list" in msg or "show" in msg or "all products" in msg:
+        return "list"
+    return None
 
 
 # =====================================================
@@ -154,8 +129,7 @@ def detect_product_intent(message: str):
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    file_path = os.path.join(os.path.dirname(__file__), "index.html")
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(os.path.join(os.path.dirname(__file__), "index.html"), encoding="utf-8") as f:
         return f.read()
 
 
@@ -167,16 +141,17 @@ def home():
 def chat(data: ChatInput):
     msg = data.message.strip().lower()
 
-    # ---- Greetings
+    # ---- Greeting
     if msg in ["hi", "hello", "hey"]:
         return {
             "reply": (
-                "👋 Hi! I can help with:\n"
-                "• Order tracking (Order ID)\n"
-                "• Product details (Product ID)\n\n"
-                "Example:\n"
+                "👋 Hi! I can help you with:\n"
+                "• Order tracking\n"
+                "• Product details\n"
+                "• Available products\n\n"
+                "Examples:\n"
                 "- Status of order JB3001\n"
-                "- Price of product PRD101"
+                "- What items are in stock?"
             )
         }
 
@@ -198,17 +173,9 @@ def chat(data: ChatInput):
         if intent == "item":
             return {"reply": f"📦 Order {order['OrderID']}\n• Item: {order['ItemName']} (Qty: {order['Quantity']})"}
 
-        return {
-            "reply": (
-                f"📦 Order {order['OrderID']}\n"
-                f"• Status: {order['OrderStatus']}\n"
-                f"• Item: {order['ItemName']}\n"
-                f"• Amount: ₹{order['TotalAmount']}\n"
-                f"• Delivery Date: {order['DeliveryDate']}"
-            )
-        }
+        return {"reply": f"📦 Order {order['OrderID']} is {order['OrderStatus']}."}
 
-    # ---- Products
+    # ---- Products by ID
     product_id = detect_product_id(msg)
     if product_id:
         product = get_product_by_id(product_id)
@@ -229,9 +196,22 @@ def chat(data: ChatInput):
                 f"🛒 {product['Product Name']}\n"
                 f"• Category: {product['Category']}\n"
                 f"• Price: ₹{product['Price (INR)']}\n"
-                f"• Availability: {product['Availability']}\n"
-                f"• Description: {product['Description']}"
+                f"• Availability: {product['Availability']}"
             )
         }
 
-    return {"reply": "Please provide a valid Order ID or Product ID."}
+    # ---- Product catalog queries (NO Product ID)
+    intent = detect_product_intent(msg)
+    if intent in ["availability", "list"]:
+        in_stock = [
+            f"• {p['Product Name']} – ₹{p['Price (INR)']}"
+            for p in PRODUCTS
+            if p.get("Availability", "").lower() == "in stock"
+        ]
+
+        if not in_stock:
+            return {"reply": "No products are currently in stock."}
+
+        return {"reply": "🟢 Products in stock:\n" + "\n".join(in_stock)}
+
+    return {"reply": "Please ask about an order, a product, or available items."}
