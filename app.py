@@ -40,27 +40,39 @@ KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 # CHRISTMAS STORE – ORDERS (INR)
 # =====================================================
 
-def load_orders():
-    path = os.path.join(KNOWLEDGE_DIR, "orders.csv")
+def load_orders(filename):
+    path = os.path.join(KNOWLEDGE_DIR, filename)
     if not os.path.exists(path):
         return []
     with open(path, encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
-ORDERS = load_orders()
-ORDER_IDS = {o["OrderID"].lower() for o in ORDERS if o.get("OrderID")}
+CHRISTMAS_ORDERS = load_orders("orders.csv")
+CHRISTMAS_ORDER_IDS = {
+    o["OrderID"].lower() for o in CHRISTMAS_ORDERS if o.get("OrderID")
+}
 
 
-def detect_order_id(message: str):
+# =====================================================
+# PARIS STORE – ORDERS (EUR)
+# =====================================================
+
+PARIS_ORDERS = load_orders("paris_orders.csv")
+PARIS_ORDER_IDS = {
+    o["OrderID"].lower() for o in PARIS_ORDERS if o.get("OrderID")
+}
+
+
+def detect_order_id(message: str, valid_ids: set):
     for word in re.findall(r"[A-Za-z0-9\-]+", message.lower()):
-        if word in ORDER_IDS:
+        if word in valid_ids:
             return word
     return None
 
 
-def get_order(order_id: str):
-    for o in ORDERS:
+def get_order(order_id: str, orders: list):
+    for o in orders:
         if o["OrderID"].lower() == order_id:
             return o
     return None
@@ -71,10 +83,14 @@ def detect_order_intent(msg: str):
         return "delivery"
     if "status" in msg:
         return "status"
-    if any(k in msg for k in ["price", "amount", "total"]):
+    if any(k in msg for k in ["amount", "total", "price"]):
         return "amount"
     if "item" in msg:
         return "item"
+    if "customer" in msg or "name" in msg:
+        return "customer"
+    if "city" in msg or "country" in msg:
+        return "location"
     return "full"
 
 
@@ -119,15 +135,11 @@ def detect_product_intent(msg: str):
 
 
 # =====================================================
-# PARIS STORE – WESTERN DRESSES (EUR)
-# CSV columns: product_name | style | price_eur
+# PARIS STORE – PRODUCTS (EUR)
 # =====================================================
 
 def load_paris_products():
-    path = os.path.join(
-        KNOWLEDGE_DIR,
-        "womens_collections.csv"
-    )
+    path = os.path.join(KNOWLEDGE_DIR, "womens_collections.csv")
     if not os.path.exists(path):
         return []
     with open(path, encoding="utf-8") as f:
@@ -139,33 +151,22 @@ PARIS_PRODUCTS = load_paris_products()
 
 def find_paris_product(message: str):
     msg = message.lower()
-
     for p in PARIS_PRODUCTS:
         name = p.get("product_name", "").lower()
         if not name:
             continue
-
-        keywords = name.split()
-
-        # Match if all words of product name appear in message
-        if all(k in msg for k in keywords):
+        if all(k in msg for k in name.split()):
             return p
-
     return None
 
 
 def detect_paris_intent(msg: str):
-    msg = msg.lower()
-
     if any(k in msg for k in ["price", "cost"]):
         return "price"
-
     if "style" in msg or "type" in msg:
         return "style"
-
     if any(k in msg for k in ["list", "show", "all", "items", "dresses"]):
         return "list"
-
     return None
 
 
@@ -180,7 +181,7 @@ def home():
 
 
 # =====================================================
-# CHAT ENDPOINT (SITE-AWARE ROUTER)
+# CHAT ENDPOINT
 # =====================================================
 
 @app.post("/chat")
@@ -194,7 +195,8 @@ def chat(data: ChatInput):
             "reply": (
                 f"👋 Hi! Welcome to the **{site.upper()} store**.\n\n"
                 "Try:\n"
-                "- Status of order JB3001\n"
+                "- Status of order PR1001\n"
+                "- Delivery of order PR1002\n"
                 "- Price of Cocktail Dress\n"
                 "- Show western dresses"
             )
@@ -205,45 +207,54 @@ def chat(data: ChatInput):
     # =================================================
     if site in ["default", "christmas", "india"]:
 
-        order_id = detect_order_id(msg)
+        order_id = detect_order_id(msg, CHRISTMAS_ORDER_IDS)
         if order_id:
-            order = get_order(order_id)
-            if not order:
-                return {"reply": "Order not found."}
-
+            order = get_order(order_id, CHRISTMAS_ORDERS)
             intent = detect_order_intent(msg)
 
             if intent == "delivery":
-                return {"reply": f"📦 Order {order['OrderID']}\nDelivery: {order['DeliveryDate']}"}
+                return {"reply": f"📦 Delivery: {order['DeliveryDate']}"}
             if intent == "status":
-                return {"reply": f"📦 Order {order['OrderID']}\nStatus: {order['OrderStatus']}"}
+                return {"reply": f"📦 Status: {order['OrderStatus']}"}
             if intent == "amount":
                 return {"reply": f"📦 Amount: ₹{order['TotalAmount']}"}
             if intent == "item":
                 return {"reply": f"📦 Item: {order['ItemName']} (Qty {order['Quantity']})"}
 
-            return {"reply": f"📦 Order {order['OrderID']} is {order['OrderStatus']}"}
-
-        pid = detect_product_id(msg)
-        if pid:
-            product = get_product(pid)
-            if not product:
-                return {"reply": "Product not found."}
-
-            intent = detect_product_intent(msg)
-
-            if intent == "price":
-                return {"reply": f"🛒 {product['Product Name']} – ₹{product['Price (INR)']}"}
-            if intent == "availability":
-                return {"reply": f"🛒 Availability: {product['Availability']}"}
-            if intent == "description":
-                return {"reply": product["Description"]}
-
     # =================================================
-    # PARIS STORE
+    # PARIS STORE – ORDERS (EUR)
     # =================================================
     if site == "paris":
 
+        order_id = detect_order_id(msg, PARIS_ORDER_IDS)
+        if order_id:
+            order = get_order(order_id, PARIS_ORDERS)
+            intent = detect_order_intent(msg)
+
+            if intent == "delivery":
+                return {"reply": f"📦 Delivery: {order['DeliveryDate']}"}
+            if intent == "status":
+                return {"reply": f"📦 Status: {order['OrderStatus']}"}
+            if intent == "amount":
+                return {"reply": f"📦 Amount: €{order['TotalAmountEUR']}"}
+            if intent == "item":
+                return {"reply": f"📦 Item: {order['ItemName']} (Qty {order['Quantity']})"}
+            if intent == "customer":
+                return {"reply": f"👤 Customer: {order['CustomerName']}"}
+            if intent == "location":
+                return {"reply": f"📍 {order['City']}, {order['Country']}"}
+
+            return {
+                "reply": (
+                    f"📦 Order {order['OrderID']}\n"
+                    f"Customer: {order['CustomerName']}\n"
+                    f"Item: {order['ItemName']}\n"
+                    f"Amount: €{order['TotalAmountEUR']}\n"
+                    f"Status: {order['OrderStatus']}"
+                )
+            }
+
+        # ---------- Paris products (existing logic)
         intent = detect_paris_intent(msg)
         product = find_paris_product(msg)
 
@@ -253,14 +264,6 @@ def chat(data: ChatInput):
             if intent == "style":
                 return {"reply": f"👗 Style: {product['style']}"}
 
-            return {
-                "reply": (
-                    f"👗 {product['product_name']}\n"
-                    f"Style: {product['style']}\n"
-                    f"Price: €{product['price_eur']}"
-                )
-            }
-
         if intent == "list":
             return {
                 "reply": "🇫🇷 Paris Western Dresses:\n" +
@@ -269,15 +272,5 @@ def chat(data: ChatInput):
                     for p in PARIS_PRODUCTS
                 )
             }
-
-        return {
-            "reply": (
-                "🇫🇷 I can help with Paris western dresses.\n"
-                "Try:\n"
-                "- Price of Cocktail Dress\n"
-                "- Style of Evening Gown\n"
-                "- Show all dresses"
-            )
-        }
 
     return {"reply": "Please ask about products or orders."}
