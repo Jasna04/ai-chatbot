@@ -24,7 +24,7 @@ app.add_middleware(
 
 
 # =====================================================
-# REQUEST MODEL (SITE-AWARE)
+# REQUEST MODEL
 # =====================================================
 
 class ChatInput(BaseModel):
@@ -37,7 +37,7 @@ KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 
 
 # =====================================================
-# ORDERS KNOWLEDGE BASE (CHRISTMAS / INDIA)
+# CHRISTMAS STORE – ORDERS (INR)
 # =====================================================
 
 def load_orders():
@@ -67,11 +67,11 @@ def get_order(order_id: str):
 
 
 def detect_order_intent(msg: str):
-    if any(k in msg for k in ["delivery", "eta", "delivered"]):
+    if "delivery" in msg or "eta" in msg:
         return "delivery"
     if "status" in msg:
         return "status"
-    if any(k in msg for k in ["amount", "total", "price"]):
+    if "price" in msg or "amount" in msg or "total" in msg:
         return "amount"
     if "item" in msg:
         return "item"
@@ -79,7 +79,7 @@ def detect_order_intent(msg: str):
 
 
 # =====================================================
-# PRODUCTS KNOWLEDGE BASE (INDIA / INR)
+# CHRISTMAS STORE – PRODUCTS (INR)
 # =====================================================
 
 def load_products():
@@ -109,19 +109,17 @@ def get_product(pid: str):
 
 
 def detect_product_intent(msg: str):
-    if "price" in msg or "cost" in msg:
+    if "price" in msg:
         return "price"
-    if "available" in msg or "stock" in msg:
+    if "stock" in msg or "available" in msg:
         return "availability"
     if "description" in msg or "about" in msg:
         return "description"
-    if "list" in msg or "show" in msg:
-        return "list"
     return None
 
 
 # =====================================================
-# PARIS / WESTERN DRESSES (EURO)
+# PARIS STORE – WESTERN DRESSES (EUR)
 # =====================================================
 
 def load_paris_products():
@@ -149,9 +147,9 @@ def find_paris_product(message: str):
 def detect_paris_intent(msg: str):
     if "price" in msg:
         return "price"
-    if "style" in msg or "type" in msg:
+    if "style" in msg:
         return "style"
-    if any(k in msg for k in ["list", "show", "western", "paris"]):
+    if "list" in msg or "show" in msg or "western" in msg:
         return "list"
     return None
 
@@ -167,7 +165,7 @@ def home():
 
 
 # =====================================================
-# CHAT ENDPOINT (SITE ROUTER)
+# CHAT ENDPOINT (SITE-AWARE)
 # =====================================================
 
 @app.post("/chat")
@@ -175,12 +173,12 @@ def chat(data: ChatInput):
     msg = data.message.lower().strip()
     site = (data.site or "default").lower()
 
-    # ---------- Greeting
+    # -------- Greeting
     if msg in ["hi", "hello", "hey"]:
         return {
             "reply": (
-                f"👋 Hi! You’re chatting with the **{site.upper()}** assistant.\n\n"
-                "Try:\n"
+                f"👋 Hi! Welcome to the **{site.upper()} store**.\n\n"
+                "Try asking:\n"
                 "- Status of order JB3001\n"
                 "- Price of Cocktail Dress\n"
                 "- Show western dresses"
@@ -188,9 +186,9 @@ def chat(data: ChatInput):
         }
 
     # =================================================
-    # INDIA / CHRISTMAS STORE
+    # CHRISTMAS STORE (INDIA)
     # =================================================
-    if site in ["default", "india", "christmas"]:
+    if site in ["christmas", "india", "default"]:
 
         order_id = detect_order_id(msg)
         if order_id:
@@ -205,7 +203,7 @@ def chat(data: ChatInput):
             if intent == "status":
                 return {"reply": f"📦 Order {order['OrderID']}\nStatus: {order['OrderStatus']}"}
             if intent == "amount":
-                return {"reply": f"📦 Order {order['OrderID']}\nAmount: ₹{order['TotalAmount']}"}
+                return {"reply": f"📦 Amount: ₹{order['TotalAmount']}"}
             if intent == "item":
                 return {"reply": f"📦 Item: {order['ItemName']} (Qty {order['Quantity']})"}
 
@@ -213,26 +211,18 @@ def chat(data: ChatInput):
 
         pid = detect_product_id(msg)
         if pid:
-            p = get_product(pid)
-            if not p:
+            product = get_product(pid)
+            if not product:
                 return {"reply": "Product not found."}
 
             intent = detect_product_intent(msg)
 
             if intent == "price":
-                return {"reply": f"🛒 {p['Product Name']} – ₹{p['Price (INR)']}"}
+                return {"reply": f"🛒 {product['Product Name']} – ₹{product['Price (INR)']}"}
             if intent == "availability":
-                return {"reply": f"🛒 Availability: {p['Availability']}"}
+                return {"reply": f"🛒 Availability: {product['Availability']}"}
             if intent == "description":
-                return {"reply": p["Description"]}
-
-            return {
-                "reply": (
-                    f"🛒 {p['Product Name']}\n"
-                    f"Price: ₹{p['Price (INR)']}\n"
-                    f"Availability: {p['Availability']}"
-                )
-            }
+                return {"reply": product["Description"]}
 
     # =================================================
     # PARIS STORE
@@ -256,3 +246,13 @@ def chat(data: ChatInput):
                 )
             }
 
+        if intent == "list":
+            return {
+                "reply": "🇫🇷 Paris Western Dresses:\n" +
+                "\n".join(
+                    f"• {p['product_name']} – €{p['price_eur']}"
+                    for p in PARIS_PRODUCTS
+                )
+            }
+
+    return {"reply": f"I can help with items from the **{site.upper()}** store."}
