@@ -1,0 +1,6 @@
+OrderID,CustomerName,Email,ItemName,Quantity,TotalAmountEUR,OrderStatus,DeliveryDate,OrderDate,City,Country
+PR1001,Camille Dupont,camille.dupont@gmail.com,Cocktail Dress,1,144.43,Delivered,2025-12-14,2025-12-10,Paris,France
+PR1002,Sophie Martin,sophie.martin@gmail.com,Evening Gown,1,111.1,Shipped,2025-12-18,2025-12-13,Lyon,France
+PR1003,Élodie Bernard,elodie.bernard@gmail.com,Floral Summer Dress,2,55.54,Processing,2025-12-20,2025-12-15,Marseille,France
+PR1004,Claire Moreau,claire.moreau@gmail.com,Pleated Midi Dress,1,33.32,Delivered,2025-12-16,2025-12-11,Paris,France
+PR1005,Juliette Laurent,juliette.laurent@gmail.com,Denim Dress,1,38.88,Shipped,2025-12-19,2025-12-14,Nice,France
