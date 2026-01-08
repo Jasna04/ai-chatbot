@@ -1,15 +1,18 @@
 import os
 import csv
 import re
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-# -------------------------
-# App setup
-# -------------------------
+
+# =====================================================
+# APP SETUP
+# =====================================================
+
 app = FastAPI()
 
 app.add_middleware(
@@ -19,33 +22,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------------
-# Request model
-# -------------------------
+
+# =====================================================
+# REQUEST MODEL (SITE-AWARE)
+# =====================================================
+
 class ChatInput(BaseModel):
     message: str
+    site: Optional[str] = "default"
+
+
+BASE_DIR = os.path.dirname(__file__)
+KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 
 
 # =====================================================
-# ORDERS KNOWLEDGE BASE
+# ORDERS KNOWLEDGE BASE (CHRISTMAS / INDIA)
 # =====================================================
 
-def load_all_order_ids():
-    file_path = os.path.join(os.path.dirname(__file__), "knowledge", "orders.csv")
-    ids = set()
-
-    if not os.path.exists(file_path):
-        return ids
-
-    with open(file_path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            oid = str(row.get("OrderID", "")).strip()
-            if oid:
-                ids.add(oid.lower())
-    return ids
+def load_orders():
+    path = os.path.join(KNOWLEDGE_DIR, "orders.csv")
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return list(csv.DictReader(f))
 
 
-ORDER_IDS = load_all_order_ids()
+ORDERS = load_orders()
+ORDER_IDS = {o["OrderID"].lower() for o in ORDERS if o.get("OrderID")}
 
 
 def detect_order_id(message: str):
@@ -55,25 +59,19 @@ def detect_order_id(message: str):
     return None
 
 
-def get_order_by_id(order_id: str):
-    file_path = os.path.join(os.path.dirname(__file__), "knowledge", "orders.csv")
-    if not os.path.exists(file_path):
-        return None
-
-    with open(file_path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if order_id == str(row.get("OrderID", "")).lower():
-                return row
+def get_order(order_id: str):
+    for o in ORDERS:
+        if o["OrderID"].lower() == order_id:
+            return o
     return None
 
 
-def detect_order_intent(message: str):
-    msg = message.lower()
-    if "delivery" in msg or "delivered" in msg or "eta" in msg:
+def detect_order_intent(msg: str):
+    if any(k in msg for k in ["delivery", "eta", "delivered"]):
         return "delivery"
     if "status" in msg:
         return "status"
-    if "amount" in msg or "total" in msg or "price" in msg:
+    if any(k in msg for k in ["amount", "total", "price"]):
         return "amount"
     if "item" in msg:
         return "item"
@@ -81,23 +79,19 @@ def detect_order_intent(message: str):
 
 
 # =====================================================
-# PRODUCTS KNOWLEDGE BASE (WITH PRODUCT ID)
+# PRODUCTS KNOWLEDGE BASE (INDIA / INR)
 # =====================================================
 
-def load_all_products():
-    file_path = os.path.join(os.path.dirname(__file__), "knowledge", "products.csv")
-    if not os.path.exists(file_path):
+def load_products():
+    path = os.path.join(KNOWLEDGE_DIR, "products.csv")
+    if not os.path.exists(path):
         return []
-    with open(file_path, newline="", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
-PRODUCTS = load_all_products()
-PRODUCT_IDS = {
-    str(p.get("Product ID", "")).lower()
-    for p in PRODUCTS
-    if p.get("Product ID")
-}
+PRODUCTS = load_products()
+PRODUCT_IDS = {p["Product ID"].lower() for p in PRODUCTS if p.get("Product ID")}
 
 
 def detect_product_id(message: str):
@@ -107,167 +101,158 @@ def detect_product_id(message: str):
     return None
 
 
-def get_product_by_id(product_id: str):
+def get_product(pid: str):
     for p in PRODUCTS:
-        if product_id == str(p.get("Product ID", "")).lower():
+        if p["Product ID"].lower() == pid:
             return p
     return None
 
 
-def detect_product_intent(message: str):
-    msg = message.lower()
+def detect_product_intent(msg: str):
     if "price" in msg or "cost" in msg:
         return "price"
     if "available" in msg or "stock" in msg:
         return "availability"
     if "description" in msg or "about" in msg:
         return "description"
-    if "list" in msg or "show" in msg or "all products" in msg:
+    if "list" in msg or "show" in msg:
         return "list"
     return None
 
 
 # =====================================================
-# WESTERN DRESSES – PARIS (EURO)
+# PARIS / WESTERN DRESSES (EURO)
 # =====================================================
 
-def load_western_dresses():
-    file_path = os.path.join(
-        os.path.dirname(__file__),
-        "knowledge",
+def load_paris_products():
+    path = os.path.join(
+        KNOWLEDGE_DIR,
         "western_dresses_products_style_price_eur.csv"
     )
-    if not os.path.exists(file_path):
+    if not os.path.exists(path):
         return []
-
-    with open(file_path, newline="", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
-WESTERN_DRESSES = load_western_dresses()
+PARIS_PRODUCTS = load_paris_products()
 
 
-def find_western_dress_by_name(message: str):
+def find_paris_product(message: str):
     msg = message.lower()
-    for d in WESTERN_DRESSES:
-        name = d.get("product_name", "").lower()
-        if name and name in msg:
-            return d
+    for p in PARIS_PRODUCTS:
+        if p["product_name"].lower() in msg:
+            return p
     return None
 
 
-def detect_western_intent(message: str):
-    msg = message.lower()
-    if "price" in msg or "cost" in msg:
+def detect_paris_intent(msg: str):
+    if "price" in msg:
         return "price"
     if "style" in msg or "type" in msg:
         return "style"
-    if "western" in msg or "paris" in msg or "list" in msg or "show" in msg:
+    if any(k in msg for k in ["list", "show", "western", "paris"]):
         return "list"
     return None
 
 
 # =====================================================
-# Serve frontend
+# FRONTEND
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    with open(os.path.join(os.path.dirname(__file__), "index.html"), encoding="utf-8") as f:
+    with open(os.path.join(BASE_DIR, "index.html"), encoding="utf-8") as f:
         return f.read()
 
 
 # =====================================================
-# Chat endpoint
+# CHAT ENDPOINT (SITE ROUTER)
 # =====================================================
 
 @app.post("/chat")
 def chat(data: ChatInput):
-    msg = data.message.strip().lower()
+    msg = data.message.lower().strip()
+    site = (data.site or "default").lower()
 
-    # ---- Greeting
+    # ---------- Greeting
     if msg in ["hi", "hello", "hey"]:
         return {
             "reply": (
-                "👋 Hi! I can help you with:\n"
-                "• Order tracking\n"
-                "• Product details\n"
-                "• Paris western dresses\n\n"
-                "Examples:\n"
+                f"👋 Hi! You’re chatting with the **{site.upper()}** assistant.\n\n"
+                "Try:\n"
                 "- Status of order JB3001\n"
                 "- Price of Cocktail Dress\n"
                 "- Show western dresses"
             )
         }
 
-    # ---- Orders
-    order_id = detect_order_id(msg)
-    if order_id:
-        order = get_order_by_id(order_id)
-        if not order:
-            return {"reply": f"No order found with ID {order_id.upper()}."}
+    # =================================================
+    # INDIA / CHRISTMAS STORE
+    # =================================================
+    if site in ["default", "india", "christmas"]:
 
-        intent = detect_order_intent(msg)
+        order_id = detect_order_id(msg)
+        if order_id:
+            order = get_order(order_id)
+            if not order:
+                return {"reply": "Order not found."}
 
-        if intent == "delivery":
-            return {"reply": f"📦 Order {order['OrderID']}\n• Delivery Date: {order['DeliveryDate']}"}
-        if intent == "status":
-            return {"reply": f"📦 Order {order['OrderID']}\n• Status: {order['OrderStatus']}"}
-        if intent == "amount":
-            return {"reply": f"📦 Order {order['OrderID']}\n• Total Amount: ₹{order['TotalAmount']}"}
-        if intent == "item":
-            return {"reply": f"📦 Order {order['OrderID']}\n• Item: {order['ItemName']} (Qty: {order['Quantity']})"}
+            intent = detect_order_intent(msg)
 
-        return {"reply": f"📦 Order {order['OrderID']} is {order['OrderStatus']}."}
+            if intent == "delivery":
+                return {"reply": f"📦 Order {order['OrderID']}\nDelivery: {order['DeliveryDate']}"}
+            if intent == "status":
+                return {"reply": f"📦 Order {order['OrderID']}\nStatus: {order['OrderStatus']}"}
+            if intent == "amount":
+                return {"reply": f"📦 Order {order['OrderID']}\nAmount: ₹{order['TotalAmount']}"}
+            if intent == "item":
+                return {"reply": f"📦 Item: {order['ItemName']} (Qty {order['Quantity']})"}
 
-    # ---- Products by Product ID
-    product_id = detect_product_id(msg)
-    if product_id:
-        product = get_product_by_id(product_id)
-        if not product:
-            return {"reply": f"No product found with ID {product_id.upper()}."}
+            return {"reply": f"📦 Order {order['OrderID']} is {order['OrderStatus']}"}
 
-        intent = detect_product_intent(msg)
+        pid = detect_product_id(msg)
+        if pid:
+            p = get_product(pid)
+            if not p:
+                return {"reply": "Product not found."}
 
-        if intent == "price":
-            return {"reply": f"🛒 {product['Product Name']}\n• Price: ₹{product['Price (INR)']}"}
-        if intent == "availability":
-            return {"reply": f"🛒 {product['Product Name']}\n• Availability: {product['Availability']}"}
-        if intent == "description":
-            return {"reply": f"🛒 {product['Product Name']}\n• {product['Description']}"}
+            intent = detect_product_intent(msg)
 
-        return {
-            "reply": (
-                f"🛒 {product['Product Name']}\n"
-                f"• Category: {product['Category']}\n"
-                f"• Price: ₹{product['Price (INR)']}\n"
-                f"• Availability: {product['Availability']}"
-            )
-        }
+            if intent == "price":
+                return {"reply": f"🛒 {p['Product Name']} – ₹{p['Price (INR)']}"}
+            if intent == "availability":
+                return {"reply": f"🛒 Availability: {p['Availability']}"}
+            if intent == "description":
+                return {"reply": p["Description"]}
 
-    # ---- Western Dresses (Paris / EUR)
-    western = find_western_dress_by_name(msg)
-    intent = detect_western_intent(msg)
+            return {
+                "reply": (
+                    f"🛒 {p['Product Name']}\n"
+                    f"Price: ₹{p['Price (INR)']}\n"
+                    f"Availability: {p['Availability']}"
+                )
+            }
 
-    if western:
-        if intent == "price":
-            return {"reply": f"👗 {western['product_name']}\n• Price: €{western['price_eur']}"}
-        if intent == "style":
-            return {"reply": f"👗 {western['product_name']}\n• Style: {western['style']}"}
+    # =================================================
+    # PARIS STORE
+    # =================================================
+    if site == "paris":
 
-        return {
-            "reply": (
-                f"👗 {western['product_name']}\n"
-                f"• Style: {western['style']}\n"
-                f"• Price: €{western['price_eur']}"
-            )
-        }
+        product = find_paris_product(msg)
+        intent = detect_paris_intent(msg)
 
-    if intent == "list" and WESTERN_DRESSES:
-        items = [
-            f"• {d['product_name']} – €{d['price_eur']}"
-            for d in WESTERN_DRESSES
-        ]
-        return {"reply": "🇫🇷 Paris Western Dresses:\n" + "\n".join(items)}
+        if product:
+            if intent == "price":
+                return {"reply": f"👗 {product['product_name']} – €{product['price_eur']}"}
+            if intent == "style":
+                return {"reply": f"👗 Style: {product['style']}"}
 
-    return {"reply": "Please ask about an order, a product, or Paris western dresses."}
+            return {
+                "reply": (
+                    f"👗 {product['product_name']}\n"
+                    f"Style: {product['style']}\n"
+                    f"Price: €{product['price_eur']}"
+                )
+            }
+
