@@ -126,7 +126,7 @@ def detect_product_intent(msg: str):
 def load_paris_products():
     path = os.path.join(
         KNOWLEDGE_DIR,
-        "western_dresses_products_style_price_eur.csv"
+        "womens_collections.csv"
     )
     if not os.path.exists(path):
         return []
