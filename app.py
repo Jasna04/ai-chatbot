@@ -45,7 +45,7 @@ KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 # SENDGRID CONFIG
 # =====================================================
 
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY1")
 FROM_EMAIL = os.getenv("FROM_EMAIL")
 SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL")
 
