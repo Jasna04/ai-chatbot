@@ -1,12 +1,17 @@
 import os
 import csv
 import re
+import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 
 # =====================================================
@@ -37,7 +42,67 @@ KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 
 
 # =====================================================
-# CHRISTMAS STORE – ORDERS (INR)
+# SENDGRID CONFIG (SAFE)
+# =====================================================
+
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+FROM_EMAIL = os.getenv("FROM_EMAIL")
+SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL")
+
+
+def send_support_email(subject: str, body: str):
+    message = Mail(
+        from_email=FROM_EMAIL,
+        to_emails=SUPPORT_EMAIL,
+        subject=subject,
+        plain_text_content=body,
+    )
+
+    sg = SendGridAPIClient(SENDGRID_API_KEY)
+    sg.send(message)
+
+
+def create_support_ticket(site: str, user_message: str):
+    ticket_id = f"TKT-{uuid.uuid4().hex[:8].upper()}"
+
+    email_body = f"""
+NEW SUPPORT TICKET
+
+Ticket ID: {ticket_id}
+Store: {site.upper()}
+Created: {datetime.utcnow().isoformat()} UTC
+
+Customer Message:
+{user_message}
+"""
+
+    send_support_email(
+        subject=f"[{site.upper()}] Support Ticket {ticket_id}",
+        body=email_body
+    )
+
+    return ticket_id
+
+
+def detect_escalation_intent(msg: str):
+    return any(
+        k in msg for k in [
+            "talk to human",
+            "human support",
+            "support agent",
+            "customer care",
+            "complaint",
+            "issue",
+            "problem",
+            "not happy",
+            "help me",
+            "escalate"
+        ]
+    )
+
+
+# =====================================================
+# LOAD ORDERS
 # =====================================================
 
 def load_orders(filename):
@@ -49,19 +114,10 @@ def load_orders(filename):
 
 
 CHRISTMAS_ORDERS = load_orders("orders.csv")
-CHRISTMAS_ORDER_IDS = {
-    o["OrderID"].lower() for o in CHRISTMAS_ORDERS if o.get("OrderID")
-}
-
-
-# =====================================================
-# PARIS STORE – ORDERS (EUR)
-# =====================================================
-
 PARIS_ORDERS = load_orders("paris_orders.csv")
-PARIS_ORDER_IDS = {
-    o["OrderID"].lower() for o in PARIS_ORDERS if o.get("OrderID")
-}
+
+CHRISTMAS_ORDER_IDS = {o["OrderID"].lower() for o in CHRISTMAS_ORDERS if o.get("OrderID")}
+PARIS_ORDER_IDS = {o["OrderID"].lower() for o in PARIS_ORDERS if o.get("OrderID")}
 
 
 def detect_order_id(message: str, valid_ids: set):
@@ -87,7 +143,7 @@ def detect_order_intent(msg: str):
         return "amount"
     if "item" in msg:
         return "item"
-    if "customer" in msg or "name" in msg:
+    if "customer" in msg:
         return "customer"
     if "city" in msg or "country" in msg:
         return "location"
@@ -95,47 +151,7 @@ def detect_order_intent(msg: str):
 
 
 # =====================================================
-# CHRISTMAS STORE – PRODUCTS (INR)
-# =====================================================
-
-def load_products():
-    path = os.path.join(KNOWLEDGE_DIR, "products.csv")
-    if not os.path.exists(path):
-        return []
-    with open(path, encoding="utf-8") as f:
-        return list(csv.DictReader(f))
-
-
-PRODUCTS = load_products()
-PRODUCT_IDS = {p["Product ID"].lower() for p in PRODUCTS if p.get("Product ID")}
-
-
-def detect_product_id(message: str):
-    for word in re.findall(r"[A-Za-z0-9\-]+", message.lower()):
-        if word in PRODUCT_IDS:
-            return word
-    return None
-
-
-def get_product(pid: str):
-    for p in PRODUCTS:
-        if p["Product ID"].lower() == pid:
-            return p
-    return None
-
-
-def detect_product_intent(msg: str):
-    if "price" in msg:
-        return "price"
-    if "available" in msg or "stock" in msg:
-        return "availability"
-    if "description" in msg or "about" in msg:
-        return "description"
-    return None
-
-
-# =====================================================
-# PARIS STORE – PRODUCTS (EUR)
+# PARIS PRODUCTS
 # =====================================================
 
 def load_paris_products():
@@ -153,17 +169,15 @@ def find_paris_product(message: str):
     msg = message.lower()
     for p in PARIS_PRODUCTS:
         name = p.get("product_name", "").lower()
-        if not name:
-            continue
-        if all(k in msg for k in name.split()):
+        if name and all(k in msg for k in name.split()):
             return p
     return None
 
 
 def detect_paris_intent(msg: str):
-    if any(k in msg for k in ["price", "cost"]):
+    if "price" in msg:
         return "price"
-    if "style" in msg or "type" in msg:
+    if "style" in msg:
         return "style"
     if any(k in msg for k in ["list", "show", "all", "items", "dresses"]):
         return "list"
@@ -181,7 +195,7 @@ def home():
 
 
 # =====================================================
-# CHAT ENDPOINT
+# CHAT ENDPOINT (AGENTIC)
 # =====================================================
 
 @app.post("/chat")
@@ -189,24 +203,28 @@ def chat(data: ChatInput):
     msg = data.message.lower().strip()
     site = (data.site or "default").lower()
 
-    # ---------- Greeting
-    if msg in ["hi", "hello", "hey"]:
+    # ---------- AGENT DECISION: ESCALATE
+    if detect_escalation_intent(msg):
+        ticket_id = create_support_ticket(site, data.message)
         return {
             "reply": (
-                f"👋 Hi! Welcome to the **{site.upper()} store**.\n\n"
-                "Try:\n"
-                "- Status of order PR1001\n"
-                "- Delivery of order PR1002\n"
-                "- Price of Cocktail Dress\n"
-                "- Show western dresses"
+                "🧑‍💼 I've escalated this to our human support team.\n\n"
+                f"🎫 Ticket ID: {ticket_id}\n"
+                "Our team will contact you shortly."
             )
         }
 
-    # =================================================
-    # CHRISTMAS STORE
-    # =================================================
-    if site in ["default", "christmas", "india"]:
+    # ---------- GREETING
+    if msg in ["hi", "hello", "hey"]:
+        return {
+            "reply": (
+                f"👋 Hi! Welcome to the **{site.upper()} store**.\n"
+                "You can ask about orders, products, or request human support."
+            )
+        }
 
+    # ---------- CHRISTMAS STORE
+    if site in ["default", "christmas", "india"]:
         order_id = detect_order_id(msg, CHRISTMAS_ORDER_IDS)
         if order_id:
             order = get_order(order_id, CHRISTMAS_ORDERS)
@@ -221,11 +239,8 @@ def chat(data: ChatInput):
             if intent == "item":
                 return {"reply": f"📦 Item: {order['ItemName']} (Qty {order['Quantity']})"}
 
-    # =================================================
-    # PARIS STORE – ORDERS (EUR)
-    # =================================================
+    # ---------- PARIS STORE
     if site == "paris":
-
         order_id = detect_order_id(msg, PARIS_ORDER_IDS)
         if order_id:
             order = get_order(order_id, PARIS_ORDERS)
@@ -244,17 +259,6 @@ def chat(data: ChatInput):
             if intent == "location":
                 return {"reply": f"📍 {order['City']}, {order['Country']}"}
 
-            return {
-                "reply": (
-                    f"📦 Order {order['OrderID']}\n"
-                    f"Customer: {order['CustomerName']}\n"
-                    f"Item: {order['ItemName']}\n"
-                    f"Amount: €{order['TotalAmountEUR']}\n"
-                    f"Status: {order['OrderStatus']}"
-                )
-            }
-
-        # ---------- Paris products (existing logic)
         intent = detect_paris_intent(msg)
         product = find_paris_product(msg)
 
@@ -266,11 +270,11 @@ def chat(data: ChatInput):
 
         if intent == "list":
             return {
-                "reply": "🇫🇷 Paris Western Dresses:\n" +
+                "reply": "🇫🇷 Paris Dresses:\n" +
                 "\n".join(
                     f"• {p['product_name']} – €{p['price_eur']}"
                     for p in PARIS_PRODUCTS
                 )
             }
 
-    return {"reply": "Please ask about products or orders."}
+    return {"reply": "I can help with orders, products, or connect you to human support."}
