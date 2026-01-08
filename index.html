@@ -8,15 +8,13 @@
       margin: 0;
       height: 100vh;
       font-family: Arial, sans-serif;
-      background: #f0f0f0; /* fallback */
+      background: #f0f0f0;
     }
 
     .chat-container {
       display: flex;
       flex-direction: column;
       height: 100vh;
-
-      /* Background image */
       background-image: url("/static/chatbot-bg.png");
       background-size: cover;
       background-position: center;
@@ -72,10 +70,15 @@
 
   </div>
 
+  <!-- ✅ SCRIPT MUST BE HERE -->
   <script>
+    // 🔑 Detect site from iframe URL
+    const SITE =
+      new URLSearchParams(window.location.search).get("site") || "default";
+
     const chat = document.getElementById("chat");
 
-    // ✅ Greeting message on chatbot launch
+    // Greeting message
     window.onload = () => {
       chat.innerHTML += `
         <p><b>Bot:</b> 👋 Hello! I’m your AI assistant. How can I help you today?</p>
@@ -92,7 +95,10 @@
       const res = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({
+          message: message,
+          site: SITE   // ✅ THIS is what connects the right knowledge base
+        })
       });
 
       const data = await res.json();
