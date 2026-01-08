@@ -45,7 +45,7 @@ KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 # SENDGRID CONFIG (SAFE)
 # =====================================================
 
-SENDGRID_API_KEY1 = os.getenv("SENDGRID_API_KEY")
+SENDGRID_API_KEY1 = os.getenv("SENDGRID_API_KEY1")
 FROM_EMAIL = os.getenv("FROM_EMAIL")
 SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL")
 
@@ -58,7 +58,7 @@ def send_support_email(subject: str, body: str):
         plain_text_content=body,
     )
 
-    sg = SendGridAPIClient(SENDGRID_API_KEY)
+    sg = SendGridAPIClient(SENDGRID_API_KEY1)
     sg.send(message)
 
 
