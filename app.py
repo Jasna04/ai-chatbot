@@ -67,11 +67,11 @@ def get_order(order_id: str):
 
 
 def detect_order_intent(msg: str):
-    if "delivery" in msg or "eta" in msg:
+    if any(k in msg for k in ["delivery", "eta", "delivered"]):
         return "delivery"
     if "status" in msg:
         return "status"
-    if "price" in msg or "amount" in msg or "total" in msg:
+    if any(k in msg for k in ["price", "amount", "total"]):
         return "amount"
     if "item" in msg:
         return "item"
@@ -111,7 +111,7 @@ def get_product(pid: str):
 def detect_product_intent(msg: str):
     if "price" in msg:
         return "price"
-    if "stock" in msg or "available" in msg:
+    if "available" in msg or "stock" in msg:
         return "availability"
     if "description" in msg or "about" in msg:
         return "description"
@@ -120,6 +120,7 @@ def detect_product_intent(msg: str):
 
 # =====================================================
 # PARIS STORE – WESTERN DRESSES (EUR)
+# CSV columns: product_name | style | price_eur
 # =====================================================
 
 def load_paris_products():
@@ -138,19 +139,33 @@ PARIS_PRODUCTS = load_paris_products()
 
 def find_paris_product(message: str):
     msg = message.lower()
+
     for p in PARIS_PRODUCTS:
-        if p["product_name"].lower() in msg:
+        name = p.get("product_name", "").lower()
+        if not name:
+            continue
+
+        keywords = name.split()
+
+        # Match if all words of product name appear in message
+        if all(k in msg for k in keywords):
             return p
+
     return None
 
 
 def detect_paris_intent(msg: str):
-    if "price" in msg:
+    msg = msg.lower()
+
+    if any(k in msg for k in ["price", "cost"]):
         return "price"
-    if "style" in msg:
+
+    if "style" in msg or "type" in msg:
         return "style"
-    if "list" in msg or "show" in msg or "western" in msg:
+
+    if any(k in msg for k in ["list", "show", "all", "items", "dresses"]):
         return "list"
+
     return None
 
 
@@ -165,7 +180,7 @@ def home():
 
 
 # =====================================================
-# CHAT ENDPOINT (SITE-AWARE)
+# CHAT ENDPOINT (SITE-AWARE ROUTER)
 # =====================================================
 
 @app.post("/chat")
@@ -173,12 +188,12 @@ def chat(data: ChatInput):
     msg = data.message.lower().strip()
     site = (data.site or "default").lower()
 
-    # -------- Greeting
+    # ---------- Greeting
     if msg in ["hi", "hello", "hey"]:
         return {
             "reply": (
                 f"👋 Hi! Welcome to the **{site.upper()} store**.\n\n"
-                "Try asking:\n"
+                "Try:\n"
                 "- Status of order JB3001\n"
                 "- Price of Cocktail Dress\n"
                 "- Show western dresses"
@@ -186,9 +201,9 @@ def chat(data: ChatInput):
         }
 
     # =================================================
-    # CHRISTMAS STORE (INDIA)
+    # CHRISTMAS STORE
     # =================================================
-    if site in ["christmas", "india", "default"]:
+    if site in ["default", "christmas", "india"]:
 
         order_id = detect_order_id(msg)
         if order_id:
@@ -229,8 +244,8 @@ def chat(data: ChatInput):
     # =================================================
     if site == "paris":
 
-        product = find_paris_product(msg)
         intent = detect_paris_intent(msg)
+        product = find_paris_product(msg)
 
         if product:
             if intent == "price":
@@ -255,4 +270,14 @@ def chat(data: ChatInput):
                 )
             }
 
-    return {"reply": f"I can help with items from the **{site.upper()}** store."}
+        return {
+            "reply": (
+                "🇫🇷 I can help with Paris western dresses.\n"
+                "Try:\n"
+                "- Price of Cocktail Dress\n"
+                "- Style of Evening Gown\n"
+                "- Show all dresses"
+            )
+        }
+
+    return {"reply": "Please ask about products or orders."}
