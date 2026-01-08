@@ -42,15 +42,19 @@ KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 
 
 # =====================================================
-# SENDGRID CONFIG (SAFE)
+# SENDGRID CONFIG
 # =====================================================
 
-SENDGRID_API_KEY1 = os.getenv("SENDGRID_API_KEY1")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 FROM_EMAIL = os.getenv("FROM_EMAIL")
 SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL")
 
 
 def send_support_email(subject: str, body: str):
+    if not SENDGRID_API_KEY:
+        print("❌ SendGrid API key missing")
+        return
+
     message = Mail(
         from_email=FROM_EMAIL,
         to_emails=SUPPORT_EMAIL,
@@ -58,8 +62,12 @@ def send_support_email(subject: str, body: str):
         plain_text_content=body,
     )
 
-    sg = SendGridAPIClient(SENDGRID_API_KEY1)
-    sg.send(message)
+    try:
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        sg.send(message)
+        print("✅ Support email sent")
+    except Exception as e:
+        print("❌ SendGrid error:", e)
 
 
 def create_support_ticket(site: str, user_message: str):
@@ -86,9 +94,12 @@ Customer Message:
 
 def detect_escalation_intent(msg: str):
     return any(
-        k in msg for k in [
+        k in msg
+        for k in [
             "talk to human",
             "human support",
+            "get me human",
+            "live agent",
             "support agent",
             "customer care",
             "complaint",
@@ -203,7 +214,7 @@ def chat(data: ChatInput):
     msg = data.message.lower().strip()
     site = (data.site or "default").lower()
 
-    # ---------- AGENT DECISION: ESCALATE
+    # ---------- ESCALATION (AGENT ACTION)
     if detect_escalation_intent(msg):
         ticket_id = create_support_ticket(site, data.message)
         return {
@@ -223,7 +234,9 @@ def chat(data: ChatInput):
             )
         }
 
-    # ---------- CHRISTMAS STORE
+    # =================================================
+    # CHRISTMAS STORE
+    # =================================================
     if site in ["default", "christmas", "india"]:
         order_id = detect_order_id(msg, CHRISTMAS_ORDER_IDS)
         if order_id:
@@ -239,7 +252,18 @@ def chat(data: ChatInput):
             if intent == "item":
                 return {"reply": f"📦 Item: {order['ItemName']} (Qty {order['Quantity']})"}
 
-    # ---------- PARIS STORE
+            return {
+                "reply": (
+                    f"📦 Order {order['OrderID']}\n"
+                    f"Item: {order['ItemName']}\n"
+                    f"Status: {order['OrderStatus']}\n"
+                    f"Amount: ₹{order['TotalAmount']}"
+                )
+            }
+
+    # =================================================
+    # PARIS STORE
+    # =================================================
     if site == "paris":
         order_id = detect_order_id(msg, PARIS_ORDER_IDS)
         if order_id:
@@ -258,6 +282,16 @@ def chat(data: ChatInput):
                 return {"reply": f"👤 Customer: {order['CustomerName']}"}
             if intent == "location":
                 return {"reply": f"📍 {order['City']}, {order['Country']}"}
+
+            return {
+                "reply": (
+                    f"📦 Order {order['OrderID']}\n"
+                    f"Customer: {order['CustomerName']}\n"
+                    f"Item: {order['ItemName']}\n"
+                    f"Status: {order['OrderStatus']}\n"
+                    f"Amount: €{order['TotalAmountEUR']}"
+                )
+            }
 
         intent = detect_paris_intent(msg)
         product = find_paris_product(msg)
