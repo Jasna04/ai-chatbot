@@ -81,7 +81,7 @@ def detect_order_intent(message: str):
 
 
 # =====================================================
-# PRODUCTS KNOWLEDGE BASE
+# PRODUCTS KNOWLEDGE BASE (WITH PRODUCT ID)
 # =====================================================
 
 def load_all_products():
@@ -93,7 +93,11 @@ def load_all_products():
 
 
 PRODUCTS = load_all_products()
-PRODUCT_IDS = {str(p.get("Product ID", "")).lower() for p in PRODUCTS if p.get("Product ID")}
+PRODUCT_IDS = {
+    str(p.get("Product ID", "")).lower()
+    for p in PRODUCTS
+    if p.get("Product ID")
+}
 
 
 def detect_product_id(message: str):
@@ -124,6 +128,46 @@ def detect_product_intent(message: str):
 
 
 # =====================================================
+# WESTERN DRESSES – PARIS (EURO)
+# =====================================================
+
+def load_western_dresses():
+    file_path = os.path.join(
+        os.path.dirname(__file__),
+        "knowledge",
+        "western_dresses_products_style_price_eur.csv"
+    )
+    if not os.path.exists(file_path):
+        return []
+
+    with open(file_path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+WESTERN_DRESSES = load_western_dresses()
+
+
+def find_western_dress_by_name(message: str):
+    msg = message.lower()
+    for d in WESTERN_DRESSES:
+        name = d.get("product_name", "").lower()
+        if name and name in msg:
+            return d
+    return None
+
+
+def detect_western_intent(message: str):
+    msg = message.lower()
+    if "price" in msg or "cost" in msg:
+        return "price"
+    if "style" in msg or "type" in msg:
+        return "style"
+    if "western" in msg or "paris" in msg or "list" in msg or "show" in msg:
+        return "list"
+    return None
+
+
+# =====================================================
 # Serve frontend
 # =====================================================
 
@@ -148,10 +192,11 @@ def chat(data: ChatInput):
                 "👋 Hi! I can help you with:\n"
                 "• Order tracking\n"
                 "• Product details\n"
-                "• Available products\n\n"
+                "• Paris western dresses\n\n"
                 "Examples:\n"
                 "- Status of order JB3001\n"
-                "- What items are in stock?"
+                "- Price of Cocktail Dress\n"
+                "- Show western dresses"
             )
         }
 
@@ -175,7 +220,7 @@ def chat(data: ChatInput):
 
         return {"reply": f"📦 Order {order['OrderID']} is {order['OrderStatus']}."}
 
-    # ---- Products by ID
+    # ---- Products by Product ID
     product_id = detect_product_id(msg)
     if product_id:
         product = get_product_by_id(product_id)
@@ -200,18 +245,29 @@ def chat(data: ChatInput):
             )
         }
 
-    # ---- Product catalog queries (NO Product ID)
-    intent = detect_product_intent(msg)
-    if intent in ["availability", "list"]:
-        in_stock = [
-            f"• {p['Product Name']} – ₹{p['Price (INR)']}"
-            for p in PRODUCTS
-            if p.get("Availability", "").lower() == "in stock"
+    # ---- Western Dresses (Paris / EUR)
+    western = find_western_dress_by_name(msg)
+    intent = detect_western_intent(msg)
+
+    if western:
+        if intent == "price":
+            return {"reply": f"👗 {western['product_name']}\n• Price: €{western['price_eur']}"}
+        if intent == "style":
+            return {"reply": f"👗 {western['product_name']}\n• Style: {western['style']}"}
+
+        return {
+            "reply": (
+                f"👗 {western['product_name']}\n"
+                f"• Style: {western['style']}\n"
+                f"• Price: €{western['price_eur']}"
+            )
+        }
+
+    if intent == "list" and WESTERN_DRESSES:
+        items = [
+            f"• {d['product_name']} – €{d['price_eur']}"
+            for d in WESTERN_DRESSES
         ]
+        return {"reply": "🇫🇷 Paris Western Dresses:\n" + "\n".join(items)}
 
-        if not in_stock:
-            return {"reply": "No products are currently in stock."}
-
-        return {"reply": "🟢 Products in stock:\n" + "\n".join(in_stock)}
-
-    return {"reply": "Please ask about an order, a product, or available items."}
+    return {"reply": "Please ask about an order, a product, or Paris western dresses."}
